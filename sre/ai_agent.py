@@ -382,3 +382,4 @@ RESPONDA EXCLUSIVAMENTE COM UM OBJETO JSON NO SEGUINTE FORMATO:
                 "executive_summary": f"Incidente {alertname} processado pelo agente com telemetria preservada para análise.",
                 "engine": "SRE-Deterministic-Expert-v1"
             }
+

@@ -611,13 +611,125 @@
       </div>
     </div>
 
+    <!-- SEÇÃO: SRE AIOps & ROOT CAUSE ANALYSIS (RCA ENGINE) -->
+    <div id="aiops-incident-section" class="space-y-4 pt-4">
+      
+      <!-- Cabeçalho da Seção AIOps -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-purple-950/40 via-slate-900/60 to-slate-900/40 p-4 rounded-xl border border-purple-500/30 shadow-lg">
+        <div class="flex items-center space-x-3.5">
+          <div class="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 text-lg shadow-inner">
+            <i class="fa-solid fa-robot animate-pulse"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <h3 class="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                SRE AIOps Incident Desk
+              </h3>
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30 font-mono">
+                RCA Engine
+              </span>
+            </div>
+            <p class="text-xs text-slate-400">
+              Diagnóstico autônomo de Causa Raiz cruzando alertas com logs do kernel (<span class="font-mono text-slate-300">journalctl</span>) e processos.
+            </p>
+          </div>
+        </div>
+
+        <!-- Botões de Simulação de Caos para Entrevistas (Live Demo) -->
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-xs text-slate-400 hidden lg:inline mr-1 font-mono-num">
+            <i class="fa-solid fa-flask-vial text-purple-400"></i> Caos Demo:
+          </span>
+          <button
+            onclick="triggerChaosSimulation('memory')"
+            id="btn-chaos-memory"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-purple-950/70 text-purple-300 border border-purple-500/30 text-xs font-medium transition-all flex items-center gap-1.5 hover:border-purple-400 shadow-sm cursor-pointer"
+            title="Simula saturação de RAM > 85% e gera o RCA ao vivo"
+          >
+            <i class="fa-solid fa-memory text-[11px]"></i>
+            <span>RAM Caos</span>
+          </button>
+          <button
+            onclick="triggerChaosSimulation('wan')"
+            id="btn-chaos-wan"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-sky-950/70 text-sky-300 border border-sky-500/30 text-xs font-medium transition-all flex items-center gap-1.5 hover:border-sky-400 shadow-sm cursor-pointer"
+            title="Simula degradação de link WAN e analisa rota"
+          >
+            <i class="fa-solid fa-network-wired text-[11px]"></i>
+            <span>WAN Caos</span>
+          </button>
+          <button
+            onclick="triggerChaosSimulation('disk')"
+            id="btn-chaos-disk"
+            class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-amber-950/70 text-amber-300 border border-amber-500/30 text-xs font-medium transition-all flex items-center gap-1.5 hover:border-amber-400 shadow-sm cursor-pointer"
+            title="Simula preenchimento rápido de disco raiz"
+          >
+            <i class="fa-solid fa-hard-drive text-[11px]"></i>
+            <span>Disco Caos</span>
+          </button>
+          <button
+            onclick="loadIncidents(true)"
+            class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs transition-all cursor-pointer"
+            title="Atualizar lista de incidentes"
+          >
+            <i class="fa-solid fa-arrows-rotate text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Banner de Processamento de Diagnóstico (Spinner quando simulando) -->
+      <div id="ai-loading-banner" class="hidden bg-purple-950/30 border border-purple-500/40 rounded-xl p-4 text-xs text-purple-200 flex items-center justify-between animate-pulse">
+        <div class="flex items-center space-x-3">
+          <i class="fa-solid fa-circle-notch animate-spin text-purple-400 text-base"></i>
+          <div>
+            <span class="font-bold text-white">Agente SRE em Ação:</span>
+            <span class="text-purple-300 ml-1">Coletando dumps de processos (<span class="font-mono">ps</span>), varrendo <span class="font-mono">journalctl</span> e correlacionando SLIs/SLOs...</span>
+          </div>
+        </div>
+        <span class="text-[11px] font-mono text-purple-400">Processando RCA</span>
+      </div>
+
+      <!-- Card do Diagnóstico Mais Recente (Destaque Principal) -->
+      <div id="latest-incident-card" class="metric-card rounded-xl p-6 shadow-2xl border border-purple-500/20 relative overflow-hidden space-y-5">
+        <div class="text-center py-6 text-slate-500 text-xs space-y-2">
+          <i class="fa-solid fa-shield-heart text-3xl text-purple-400/50 mb-1 block"></i>
+          <p class="text-slate-300 font-semibold">Nenhum incidente ativo no momento</p>
+          <p class="text-slate-500 max-w-md mx-auto">
+            Clique em um dos botões de <strong class="text-purple-400">Caos Demo</strong> acima para simular um alerta do Alertmanager e visualizar o diagnóstico da IA ao vivo.
+          </p>
+        </div>
+      </div>
+
+      <!-- Histórico de Incidentes Anteriores (Tabela Resumida) -->
+      <div id="incident-history-container" class="hidden bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-clock-rotate-left text-purple-400"></i> Histórico Recente de Incidentes
+          </h4>
+          <span id="incident-count-badge" class="text-[11px] font-mono-num text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+            0 incidentes
+          </span>
+        </div>
+        <div id="incident-history-list" class="divide-y divide-slate-800/60 text-xs">
+          <!-- Linhas injetadas via JS -->
+        </div>
+      </div>
+
+    </div>
+
     <!-- Painel de Informações Rápidas do Sistema (Estilo Datadog / Grafana) -->
     <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
       <div class="flex items-center space-x-4 flex-wrap gap-y-2">
         <div class="flex items-center space-x-2">
-          <span class="text-slate-400">Endpoint da API:</span>
+          <span class="text-slate-400">APIs:</span>
           <a href="/api/stats" target="_blank" class="font-mono-num text-sky-400 hover:underline bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-            GET /api/stats
+            /api/stats
+          </a>
+          <a href="/metrics" target="_blank" class="font-mono-num text-emerald-400 hover:underline bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+            /metrics (Prometheus)
+          </a>
+          <a href="/api/ai/incidents" target="_blank" class="font-mono-num text-purple-400 hover:underline bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+            /api/ai/incidents
           </a>
         </div>
         <div class="hidden sm:block text-slate-700">|</div>
@@ -738,6 +850,9 @@
       updatePrivacyButtonUI();
       if (latestStatsData) {
         renderAllStats(latestStatsData);
+      }
+      if (typeof allLoadedIncidents !== 'undefined' && allLoadedIncidents.length > 0) {
+        renderLatestIncident(allLoadedIncidents[0]);
       }
     }
 
@@ -1252,11 +1367,302 @@
       networkChart.update('none'); // Atualização instantânea sem engasgo de animação
     }
 
+    // =========================================================================
+    // MÓDULO SRE AIOPS: INCIDENT RESPONSE & ROOT CAUSE ANALYSIS (RCA)
+    // =========================================================================
+    const latestIncidentCard = document.getElementById('latest-incident-card');
+    const incidentHistoryContainer = document.getElementById('incident-history-container');
+    const incidentHistoryList = document.getElementById('incident-history-list');
+    const incidentCountBadge = document.getElementById('incident-count-badge');
+    const aiLoadingBanner = document.getElementById('ai-loading-banner');
+
+    let allLoadedIncidents = [];
+
+    /**
+     * Copia comando de remediação para a área de transferência
+     */
+    function copyCommand(btn, cmdText) {
+      if (!cmdText) return;
+      navigator.clipboard.writeText(cmdText).then(() => {
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> <span class="text-emerald-400 font-bold">Copiado</span>';
+        setTimeout(() => {
+          btn.innerHTML = originalHtml;
+        }, 2000);
+      }).catch(() => {
+        // Fallback básico
+        const textarea = document.createElement('textarea');
+        textarea.value = cmdText;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      });
+    }
+
+    /**
+     * Renderiza o Card de Diagnóstico Principal do Incidente (RCA)
+     */
+    function renderLatestIncident(inc) {
+      if (!inc || !inc.rca) return;
+      const rca = inc.rca;
+      const isCrit = (inc.severity || '').toLowerCase() === 'critical';
+      const sevColor = isCrit ? 'rose' : 'amber';
+      const evidence = inc.evidence || {};
+      const topProc = evidence.top_process || {};
+
+      // Mascara IP se modo de privacidade estiver ativo
+      let rootCauseText = rca.root_cause || '';
+      if (isPrivacyMode) {
+        rootCauseText = rootCauseText.replace(/(\d{1,3}\.){3}\d{1,3}/g, '***.***.*.*');
+      }
+
+      const remediationItemsHtml = (rca.remediation_steps || []).map((step, idx) => {
+        const isShellCmd = step.includes(': ') && (step.includes('kill') || step.includes('systemctl') || step.includes('journalctl') || step.includes('sync') || step.includes('traceroute') || step.includes('ping') || step.includes('du ') || step.includes('apt ') || step.includes('docker '));
+        let explanation = step;
+        let commandToCopy = '';
+
+        if (isShellCmd) {
+          const parts = step.split(': ');
+          explanation = parts[0];
+          commandToCopy = parts.slice(1).join(': ');
+        }
+
+        return `
+          <div class="bg-slate-950/80 rounded-lg p-3 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="space-y-0.5">
+              <span class="text-xs text-slate-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-chevron-right text-purple-400 text-[10px]"></i>
+                ${explanation}
+              </span>
+              ${commandToCopy ? `<code class="font-mono text-[11px] text-sky-300 block bg-slate-900/90 px-2 py-1 rounded border border-slate-800 select-all">$ ${commandToCopy}</code>` : ''}
+            </div>
+            ${commandToCopy ? `
+              <button
+                onclick="copyCommand(this, '${commandToCopy.replace(/'/g, "\\'")}')"
+                class="self-start sm:self-center px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-[11px] font-mono transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer shadow-sm"
+              >
+                <i class="fa-regular fa-copy text-xs"></i>
+                <span>Copiar</span>
+              </button>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+
+      latestIncidentCard.innerHTML = `
+        <!-- Topo do Card de Incidente -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-2.5 flex-wrap gap-y-1">
+              <span class="px-2.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider bg-${sevColor}-500/15 text-${sevColor}-400 border border-${sevColor}-500/30 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-${sevColor}-400 animate-ping"></span>
+                ${inc.severity || 'WARNING'} &bull; ${inc.alertname || 'Incidente'}
+              </span>
+              <span class="font-mono text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                ${inc.id}
+              </span>
+              <span class="text-xs text-slate-500 font-mono-num flex items-center gap-1">
+                <i class="fa-regular fa-clock"></i> ${inc.created_at}
+              </span>
+            </div>
+            <h4 class="text-base sm:text-lg font-bold text-white tracking-tight pt-1">
+              ${rca.title || 'Diagnóstico de Incidente'}
+            </h4>
+          </div>
+
+          <div class="flex items-center gap-2 self-start sm:self-center">
+            <span class="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono font-semibold flex items-center gap-1.5">
+              <i class="fa-solid fa-brain text-purple-400"></i>
+              Confiança SRE: ${rca.confidence_score || 90}%
+            </span>
+            <span class="px-2 py-1 rounded-md bg-slate-800/80 text-slate-300 border border-slate-700 text-[11px] font-mono hidden md:inline">
+              ${rca.engine || 'AIOps-Engine'}
+            </span>
+          </div>
+        </div>
+
+        <!-- Bloco 1: Causa Raiz Provável (RCA) -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center gap-1.5">
+              <i class="fa-solid fa-magnifying-glass-chart"></i> Causa Raiz Provável (Root Cause Analysis):
+            </span>
+            <span class="text-xs text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 font-mono">
+              Subsistema: <strong class="text-slate-200">${rca.affected_component || 'Kernel / SRE'}</strong>
+            </span>
+          </div>
+          <div class="bg-purple-950/20 border border-purple-500/30 rounded-lg p-3.5 text-xs text-slate-200 leading-relaxed">
+            ${rootCauseText}
+          </div>
+        </div>
+
+        <!-- Bloco 2: Evidências Correlacionadas (Processo Ofensor e Logs do Kernel) -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Processo Ofensor -->
+          <div class="bg-slate-900/70 border border-slate-800 rounded-lg p-3.5 space-y-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-microchip text-sky-400"></i> Processo com Maior Consumo:
+            </span>
+            ${topProc.pid ? `
+              <div class="text-xs space-y-1">
+                <div class="flex items-center justify-between font-mono text-slate-200">
+                  <span class="font-bold text-sky-400">${topProc.short_name || 'app'}</span>
+                  <span>PID: <strong class="text-white">${topProc.pid}</strong> &bull; Usuário: ${topProc.user}</span>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono-num">
+                  <span>RAM: <strong class="text-rose-400">${topProc.mem_pct}%</strong> (${Math.round((topProc.rss_kb || 0)/1024)} MB)</span>
+                  <span>CPU: <strong class="text-amber-400">${topProc.cpu_pct}%</strong></span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono truncate pt-0.5" title="${topProc.command}">
+                  ${topProc.command}
+                </div>
+              </div>
+            ` : `<span class="text-xs text-slate-500">Nenhum processo anômalo isolado.</span>`}
+          </div>
+
+          <!-- Logs do Kernel / Systemd -->
+          <div class="bg-slate-900/70 border border-slate-800 rounded-lg p-3.5 space-y-2">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-file-waveform text-amber-400"></i> Evidência em Log (journalctl / dmesg):
+            </span>
+            <div class="bg-slate-950 p-2.5 rounded text-[11px] font-mono text-slate-300 border border-slate-800/80 overflow-x-auto max-h-20 leading-relaxed">
+              ${evidence.sample_log || 'Nenhum log crítico registrado no journald no período.'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Bloco 3: Plano de Ação e Remediação Recomendado -->
+        <div class="space-y-2.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-wrench"></i> Ações de Remediação & Mitigação Recomendadas:
+          </span>
+          <div class="space-y-2">
+            ${remediationItemsHtml}
+          </div>
+        </div>
+
+        <!-- Bloco 4: Resumo Executivo para Liderança -->
+        ${rca.executive_summary ? `
+          <div class="pt-3 border-t border-slate-800/80 flex items-start gap-2 text-xs text-slate-400">
+            <i class="fa-solid fa-quote-left text-slate-600 text-sm mt-0.5"></i>
+            <div>
+              <strong class="text-slate-300">Resumo Executivo (Para Relatório de Incidente):</strong>
+              <p class="text-slate-400 mt-0.5">${rca.executive_summary}</p>
+            </div>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    /**
+     * Renderiza o histórico de incidentes em formato de tabela resumida
+     */
+    function renderIncidentHistory(incidents) {
+      if (!incidents || incidents.length === 0) {
+        incidentHistoryContainer.classList.add('hidden');
+        return;
+      }
+
+      incidentHistoryContainer.classList.remove('hidden');
+      incidentCountBadge.textContent = `${incidents.length} incidente${incidents.length > 1 ? 's' : ''}`;
+
+      incidentHistoryList.innerHTML = incidents.map((inc, index) => {
+        const isCrit = (inc.severity || '').toLowerCase() === 'critical';
+        const sevBg = isCrit ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+        return `
+          <div
+            onclick="selectHistoricalIncident(${index})"
+            class="px-4 py-2.5 hover:bg-slate-800/50 transition-colors flex items-center justify-between gap-3 cursor-pointer"
+            title="Clique para carregar o relatório RCA deste incidente"
+          >
+            <div class="flex items-center space-x-3 overflow-hidden">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${sevBg}">
+                ${inc.severity || 'WARN'}
+              </span>
+              <span class="font-bold text-slate-200 text-xs truncate">
+                ${inc.rca?.title || inc.alertname}
+              </span>
+            </div>
+            <div class="flex items-center space-x-3 text-slate-400 text-[11px] whitespace-nowrap">
+              <span class="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-purple-400">${inc.id}</span>
+              <span class="hidden sm:inline">${inc.created_at}</span>
+              <i class="fa-solid fa-chevron-right text-slate-600 text-xs"></i>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectHistoricalIncident(index) {
+      if (allLoadedIncidents && allLoadedIncidents[index]) {
+        renderLatestIncident(allLoadedIncidents[index]);
+        latestIncidentCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    /**
+     * Carrega a lista de incidentes da API
+     */
+    async function loadIncidents(forceRender = false) {
+      try {
+        const resp = await fetch('/api/ai/incidents', { cache: 'no-store' });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        allLoadedIncidents = data.incidents || [];
+
+        if (allLoadedIncidents.length > 0) {
+          renderLatestIncident(allLoadedIncidents[0]);
+          renderIncidentHistory(allLoadedIncidents);
+        }
+      } catch (err) {
+        console.warn('Não foi possível carregar incidentes AIOps:', err);
+      }
+    }
+
+    /**
+     * Dispara simulação de Caos para demonstração técnica em entrevistas
+     */
+    async function triggerChaosSimulation(scenario) {
+      if (aiLoadingBanner) aiLoadingBanner.classList.remove('hidden');
+
+      const buttons = [
+        document.getElementById('btn-chaos-memory'),
+        document.getElementById('btn-chaos-wan'),
+        document.getElementById('btn-chaos-disk')
+      ];
+      buttons.forEach(b => { if (b) b.disabled = true; });
+
+      try {
+        const resp = await fetch('/api/ai/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenario: scenario })
+        });
+
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+
+        if (data.incident) {
+          allLoadedIncidents.unshift(data.incident);
+          renderLatestIncident(data.incident);
+          renderIncidentHistory(allLoadedIncidents);
+          latestIncidentCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } catch (err) {
+        alert('Falha ao acionar simulação de caos: ' + err.message);
+      } finally {
+        if (aiLoadingBanner) aiLoadingBanner.classList.add('hidden');
+        buttons.forEach(b => { if (b) b.disabled = false; });
+      }
+    }
+
     // Executa a primeira busca imediatamente e agenda a cada 3 segundos
     document.addEventListener('DOMContentLoaded', () => {
       updatePrivacyButtonUI();
       initNetworkChart();
       fetchStats();
+      loadIncidents();
       setInterval(fetchStats, REFRESH_INTERVAL_MS);
     });
   </script>
