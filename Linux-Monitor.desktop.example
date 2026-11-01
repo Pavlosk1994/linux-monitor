@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Linux Monitor
+GenericName=System Monitor
+Comment=Dashboard profissional de monitoramento em tempo real do sistema Linux
+Exec=xdg-open http://localhost:8080
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+StartupNotify=true

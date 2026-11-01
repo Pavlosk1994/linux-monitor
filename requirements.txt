@@ -1,0 +1,4 @@
+# O servidor core (app.py) utiliza exclusivamente a biblioteca padrão do Python (Zero Dependências externas).
+# As dependências abaixo são necessárias caso queira executar o wrapper de interface desktop nativa (main.py):
+PyQt5>=5.15.0
+PyQtWebEngine>=5.15.0

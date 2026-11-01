@@ -1,0 +1,14 @@
+[Unit]
+Description=Linux Monitor - Dashboard de Telemetria do Sistema Linux
+After=network.target
+
+[Service]
+Type=simple
+# Substitua pelo caminho onde clonou o projeto (ou utilize %h para apontar para a home do seu usuário)
+WorkingDirectory=%h/linux-monitor
+ExecStart=/usr/bin/python3 %h/linux-monitor/app.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

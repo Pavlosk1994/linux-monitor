@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Node Monitor - Linux System Dashboard</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            grafana: {
+              bg: '#0b0f19',
+              card: '#111726',
+              border: '#1e293b',
+              hover: '#1e293b',
+              accent: '#38bdf8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FontAwesome CDN -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  <!-- Chart.js CDN para gráficos temporais -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f19;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .metric-card {
+      background: linear-gradient(180deg, rgba(22, 30, 49, 0.8) 0%, rgba(17, 23, 38, 0.95) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(12px);
+    }
+    .metric-card:hover {
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+    .progress-bar-transition {
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.4s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 flex flex-col antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- Header Estilo Datadog / Grafana -->
+  <header class="border-b border-slate-800/80 bg-slate-950/70 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Título, Ícone Linux e Hostname -->
+      <div class="flex items-center space-x-3.5">
+        <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl shadow-inner">
+          <i class="fa-brands fa-linux"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2.5">
+            <h1 class="text-lg font-bold tracking-tight text-white">Node Monitor</h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              LIVE
+            </span>
+          </div>
+          <div class="flex items-center space-x-2 text-xs text-slate-400">
+            <span>Host:</span>
+            <span id="header-hostname" class="font-mono-num text-sky-400 font-semibold bg-sky-950/40 px-1.5 py-0.5 rounded border border-sky-800/40">
+              carregando...
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Indicadores de Status e Auto-Refresh -->
+      <div class="flex items-center space-x-4 text-xs">
+        <div class="hidden sm:flex items-center space-x-2 text-slate-400 bg-slate-900/90 px-3 py-1.5 rounded-md border border-slate-800">
+          <i class="fa-solid fa-arrows-rotate text-sky-400 text-[11px] animate-spin-slow"></i>
+          <span>Atualização: <strong class="text-slate-200">a cada 3s</strong></span>
+        </div>
+        <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-md border border-slate-800 text-slate-300">
+          <i class="fa-solid fa-clock text-slate-400"></i>
+          <span id="last-update" class="font-mono-num text-slate-400">--:--:--</span>
+        </div>
+        <div id="conn-status" class="flex items-center space-x-1.5 text-xs text-emerald-400 font-medium">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="hidden md:inline">Conectado</span>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Conteúdo Principal -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    
+    <!-- Sub-cabeçalho Informativo -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+      <div>
+        <h2 class="text-xl font-bold text-white tracking-tight">Métricas do Sistema em Tempo Real</h2>
+        <p class="text-sm text-slate-400">Monitoramento contínuo de memória, armazenamento e disponibilidade operacional.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono-num">
+          <i class="fa-solid fa-server mr-1 text-slate-400"></i>
+          Porta: 8080
+        </span>
+      </div>
+    </div>
+
+    <!-- Grid de Cards Principais (4 Colunas no Desktop) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+      <!-- CARD 1: Uso de RAM -->
+      <div class="metric-card rounded-xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+        <div class="space-y-4">
+          <!-- Topo do Card -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <i class="fa-solid fa-memory"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-200">Uso de RAM</h3>
+                <p class="text-xs text-slate-400">Memória volátil ativa</p>
+              </div>
+            </div>
+            <!-- Badge de Status Dinâmico -->
+            <span id="ram-status-badge" class="text-xs font-medium px-2 py-0.5 rounded border transition-colors bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+              Normal
+            </span>
+          </div>
+
+          <!-- Valor Numérico -->
+          <div class="flex items-baseline space-x-2 pt-2">
+            <span id="ram-value" class="text-4xl font-bold font-mono-num tracking-tight text-white">--</span>
+            <span class="text-2xl font-bold font-mono-num text-slate-400">%</span>
+          </div>
+
+          <!-- Barra de Progresso com Cor Dinâmica -->
+          <div class="space-y-1.5">
+            <div class="w-full bg-slate-800/90 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700/50">
+              <div
+                id="ram-progress-bar"
+                class="progress-bar-transition h-full rounded-full bg-emerald-500"
+                style="width: 0%"
+              ></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400 font-mono-num">
+              <span>0%</span>
+              <span id="ram-details-text">Calculando...</span>
+              <span>100%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rodapé do Card com limites de alerta -->
+        <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> &lt;70%
+            <span class="w-2 h-2 rounded-full bg-amber-500 inline-block ml-1"></span> &lt;85%
+            <span class="w-2 h-2 rounded-full bg-rose-500 inline-block ml-1"></span> &gt;85%
+          </span>
+          <span class="text-slate-400">Escala de Alerta</span>
+        </div>
+      </div>
+
+      <!-- CARD 2: Uso do Disco Principal -->
+      <div class="metric-card rounded-xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+        <div class="space-y-4">
+          <!-- Topo do Card -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <i class="fa-solid fa-hard-drive"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-200">Uso do Disco</h3>
+                <p class="text-xs text-slate-400">Partição raiz (<span class="font-mono text-sky-400">/</span>)</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono-num font-semibold px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+              RAIZ /
+            </span>
+          </div>
+
+          <!-- Valor Numérico -->
+          <div class="flex items-baseline space-x-2 pt-2">
+            <span id="disk-value" class="text-4xl font-bold font-mono-num tracking-tight text-white">--</span>
+            <span class="text-2xl font-bold font-mono-num text-slate-400">%</span>
+          </div>
+
+          <!-- Barra de Progresso do Disco -->
+          <div class="space-y-1.5">
+            <div class="w-full bg-slate-800/90 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700/50">
+              <div
+                id="disk-progress-bar"
+                class="progress-bar-transition h-full rounded-full bg-sky-500"
+                style="width: 0%"
+              ></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400 font-mono-num">
+              <span>0%</span>
+              <span id="disk-details-text">Partição /</span>
+              <span>100%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rodapé do Card -->
+        <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <i class="fa-solid fa-folder-tree text-slate-400"></i> Sistema de Arquivos
+          </span>
+          <span class="text-slate-300 font-mono-num">Mount point: /</span>
+        </div>
+      </div>
+
+      <!-- CARD 3: Tempo Ligado (Uptime) -->
+      <div class="metric-card rounded-xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+        <div class="space-y-4">
+          <!-- Topo do Card -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-lg bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-200">Tempo Ligado</h3>
+                <p class="text-xs text-slate-400">Uptime do nó</p>
+              </div>
+            </div>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20">
+              Disponibilidade
+            </span>
+          </div>
+
+          <!-- Valor Textual do Uptime -->
+          <div class="pt-2">
+            <span id="uptime-value" class="text-2xl sm:text-3xl font-bold font-mono-num tracking-tight text-white block truncate">
+              --
+            </span>
+            <p class="text-xs text-slate-400 mt-2 flex items-center gap-1.5">
+              <i class="fa-solid fa-circle-check text-emerald-400 text-[11px]"></i>
+              Sistema operacional em execução contínua
+            </p>
+          </div>
+
+          <!-- Indicador visual estático ou animado -->
+          <div class="bg-slate-900/60 rounded-lg p-3 border border-slate-800 flex items-center justify-between text-xs">
+            <span class="text-slate-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-microchip text-slate-400"></i> Estado do Host:
+            </span>
+            <span id="uptime-host-badge" class="font-mono-num text-slate-200 font-semibold">Ativo</span>
+          </div>
+        </div>
+
+        <!-- Rodapé do Card -->
+        <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <i class="fa-solid fa-shield-halved text-teal-400"></i> SLA do Host
+          </span>
+          <span class="text-emerald-400 font-medium">99.9% Uptime</span>
+        </div>
+      </div>
+
+      <!-- CARD 4: Link de Internet -->
+      <div class="metric-card rounded-xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+        <div class="space-y-4">
+          <!-- Topo do Card -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <i class="fa-solid fa-globe"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-200">Link de Internet</h3>
+                <p class="text-xs text-slate-400">Ping 1.1.1.1 & Rede</p>
+              </div>
+            </div>
+            <!-- Badge de Status Dinâmico da Conexão -->
+            <span id="net-status-badge" class="text-xs font-medium px-2 py-0.5 rounded border transition-colors bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+              Online
+            </span>
+          </div>
+
+          <!-- Valor da Latência (ms) -->
+          <div class="flex items-baseline justify-between pt-2">
+            <div class="flex items-baseline space-x-2">
+              <span id="net-latency-val" class="text-4xl font-bold font-mono-num tracking-tight text-emerald-400">--</span>
+              <span class="text-xl font-bold font-mono-num text-slate-400">ms</span>
+            </div>
+            <span id="net-latency-tag" class="text-xs font-mono-num px-2 py-0.5 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+              --
+            </span>
+          </div>
+
+          <!-- Informações de IP Local e Público -->
+          <div class="space-y-2 pt-1">
+            <div class="bg-slate-900/70 rounded-lg px-3 py-2 border border-slate-800 flex items-center justify-between text-xs">
+              <span class="text-slate-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-network-wired text-sky-400"></i> IP Local:
+              </span>
+              <span id="net-local-ip" class="font-mono-num text-slate-200 font-semibold truncate max-w-[130px]">
+                --
+              </span>
+            </div>
+            <div class="bg-slate-900/70 rounded-lg px-3 py-2 border border-slate-800 flex items-center justify-between text-xs">
+              <span class="text-slate-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-earth-americas text-indigo-400"></i> IP Público:
+              </span>
+              <span id="net-public-ip" class="font-mono-num text-sky-400 font-semibold truncate max-w-[130px]">
+                --
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rodapé do Card com Escala de Latência -->
+        <div class="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> &lt;50ms
+            <span class="w-2 h-2 rounded-full bg-amber-500 inline-block ml-1"></span> &lt;150ms
+            <span class="w-2 h-2 rounded-full bg-rose-500 inline-block ml-1"></span> &gt;150ms
+          </span>
+          <span class="text-slate-400">Latência</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SEÇÃO: TELEMETRIA AVANÇADA DE REDE (NOC / NETWORK OPS) -->
+    <div class="space-y-4 pt-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></div>
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300">
+            Telemetria Avançada de Rede & Conectividade
+          </h3>
+        </div>
+        <span class="text-xs text-slate-500 font-mono-num flex items-center gap-1.5">
+          <i class="fa-solid fa-satellite-dish text-sky-400"></i>
+          Camada 3 & 4 (Kernel Linux)
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+        <!-- SUB-CARD 1: Throughput em Tempo Real (Rx / Tx) -->
+        <div class="metric-card rounded-xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <i class="fa-solid fa-wave-square"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs font-semibold text-slate-200">Throughput Ativo</h4>
+                  <p class="text-[11px] text-slate-400">Taxa de transferência</p>
+                </div>
+              </div>
+              <span id="traffic-status-badge" class="text-[11px] font-mono-num px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                0 drops
+              </span>
+            </div>
+
+            <!-- Download e Upload lado a lado -->
+            <div class="grid grid-cols-2 gap-3 pt-4">
+              <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800">
+                <div class="flex items-center space-x-1.5 text-xs text-sky-400 mb-1">
+                  <i class="fa-solid fa-arrow-down"></i>
+                  <span class="text-slate-400 text-[11px]">Download (Rx)</span>
+                </div>
+                <div class="flex items-baseline space-x-1">
+                  <span id="rx-rate-val" class="text-2xl font-bold font-mono-num text-white">0.0</span>
+                  <span class="text-xs font-mono-num text-slate-400">KB/s</span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono-num mt-1">
+                  Total: <span id="rx-total-val" class="text-slate-400">0.0 MB</span>
+                </div>
+              </div>
+
+              <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800">
+                <div class="flex items-center space-x-1.5 text-xs text-indigo-400 mb-1">
+                  <i class="fa-solid fa-arrow-up"></i>
+                  <span class="text-slate-400 text-[11px]">Upload (Tx)</span>
+                </div>
+                <div class="flex items-baseline space-x-1">
+                  <span id="tx-rate-val" class="text-2xl font-bold font-mono-num text-white">0.0</span>
+                  <span class="text-xs font-mono-num text-slate-400">KB/s</span>
+                </div>
+                <div class="text-[10px] text-slate-500 font-mono-num mt-1">
+                  Total: <span id="tx-total-val" class="text-slate-400">0.0 MB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Drops e Erros -->
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-mono-num">
+            <span>Erros: <strong id="net-errs-count" class="text-slate-300">0</strong></span>
+            <span>Drops: <strong id="net-drops-count" class="text-slate-300">0</strong></span>
+          </div>
+        </div>
+
+        <!-- SUB-CARD 2: Diagnóstico LAN vs WAN (Gateway vs Internet) -->
+        <div class="metric-card rounded-xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <i class="fa-solid fa-route"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs font-semibold text-slate-200">Diagnóstico LAN vs WAN</h4>
+                  <p class="text-[11px] text-slate-400">Roteador vs Internet</p>
+                </div>
+              </div>
+              <span id="split-diag-badge" class="text-[11px] font-medium px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                Avaliando
+              </span>
+            </div>
+
+            <div class="space-y-3 pt-3">
+              <!-- Gateway Local (LAN) -->
+              <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5 text-xs text-slate-300">
+                    <i class="fa-solid fa-server text-teal-400"></i>
+                    <span>Gateway Local (LAN):</span>
+                  </div>
+                  <div id="lan-gateway-ip" class="text-[11px] font-mono-num text-slate-400 mt-0.5">
+                    Detectando...
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span id="lan-latency-val" class="text-lg font-bold font-mono-num text-teal-400">--</span>
+                  <span class="text-xs font-mono-num text-slate-500">ms</span>
+                </div>
+              </div>
+
+              <!-- Internet Externa (WAN) -->
+              <div class="bg-slate-900/70 p-3 rounded-lg border border-slate-800 flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-1.5 text-xs text-slate-300">
+                    <i class="fa-solid fa-cloud text-sky-400"></i>
+                    <span>Link WAN (1.1.1.1):</span>
+                  </div>
+                  <div class="text-[11px] font-mono-num text-slate-400 mt-0.5">
+                    Cloudflare CDN Edge
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span id="wan-latency-val" class="text-lg font-bold font-mono-num text-sky-400">--</span>
+                  <span class="text-xs font-mono-num text-slate-500">ms</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
+            <span>Diferencial LAN/WAN:</span>
+            <span id="lan-wan-delta" class="font-mono-num text-slate-300 font-semibold">-- ms</span>
+          </div>
+        </div>
+
+        <!-- SUB-CARD 3: Conexões TCP & Saúde DNS -->
+        <div class="metric-card rounded-xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <i class="fa-solid fa-diagram-project"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs font-semibold text-slate-200">Sockets & Resolução DNS</h4>
+                  <p class="text-[11px] text-slate-400">Estados de conexão & Query</p>
+                </div>
+              </div>
+              <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                TCP / UDP
+              </span>
+            </div>
+
+            <!-- Grid de Métricas de Sockets -->
+            <div class="grid grid-cols-3 gap-2 pt-3">
+              <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400 uppercase">Estab.</div>
+                <div id="sock-estab-val" class="text-lg font-bold font-mono-num text-emerald-400 mt-0.5">0</div>
+              </div>
+              <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400 uppercase">Listen</div>
+                <div id="sock-listen-val" class="text-lg font-bold font-mono-num text-sky-400 mt-0.5">0</div>
+              </div>
+              <div class="bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 text-center">
+                <div class="text-[10px] text-slate-400 uppercase">TimeWait</div>
+                <div id="sock-tw-val" class="text-lg font-bold font-mono-num text-amber-400 mt-0.5">0</div>
+              </div>
+            </div>
+
+            <!-- DNS Info -->
+            <div class="mt-3 bg-slate-900/70 p-2.5 rounded-lg border border-slate-800 space-y-1 text-xs">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400 flex items-center gap-1.5 text-[11px]">
+                  <i class="fa-solid fa-compass text-amber-400"></i> Nameserver:
+                </span>
+                <span id="dns-server-val" class="font-mono-num text-slate-200 text-[11px] truncate max-w-[120px]">
+                  127.0.0.53
+                </span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-[11px]">Tempo de Resolução:</span>
+                <span id="dns-latency-val" class="font-mono-num text-amber-400 text-[11px] font-semibold">
+                  -- ms
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between font-mono-num">
+            <span>Total de Sockets:</span>
+            <span id="sock-total-val" class="text-slate-200 font-semibold">0</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- GRÁFICO DE LINHAS TEMPORAIS: Throughput & Latência -->
+      <div class="metric-card rounded-xl p-6 shadow-xl relative overflow-hidden space-y-4">
+        <!-- Topo do Gráfico com Títulos, Picos e Controles -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-800">
+          <div>
+            <div class="flex items-center space-x-2.5">
+              <div class="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <i class="fa-solid fa-chart-line"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-semibold text-white">Histórico Temporal de Tráfego & Latência</h4>
+                <p class="text-xs text-slate-400">Evolução contínua da taxa de transferência e tempo de resposta em tempo real</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Métricas de Pico da Janela Rolante -->
+          <div class="flex items-center space-x-3 text-xs font-mono-num flex-wrap">
+            <div class="bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              <span class="text-slate-400">Pico Rx:</span>
+              <span id="chart-peak-rx" class="text-sky-300 font-semibold">0.0 KB/s</span>
+            </div>
+            <div class="bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+              <span class="text-slate-400">Pico Tx:</span>
+              <span id="chart-peak-tx" class="text-indigo-300 font-semibold">0.0 KB/s</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas do Gráfico com altura responsiva -->
+        <div class="relative w-full h-64 sm:h-72">
+          <canvas id="networkTimeSeriesChart"></canvas>
+        </div>
+
+        <!-- Legenda Inferior & Informações de Amostragem -->
+        <div class="flex flex-wrap items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-800/80 gap-2">
+          <div class="flex items-center space-x-4 flex-wrap gap-y-1">
+            <span class="flex items-center space-x-1.5">
+              <span class="w-3 h-1 bg-sky-400 rounded-full inline-block"></span>
+              <span class="text-slate-300 font-medium">Download (Rx KB/s)</span>
+            </span>
+            <span class="flex items-center space-x-1.5">
+              <span class="w-3 h-1 bg-indigo-400 rounded-full inline-block"></span>
+              <span class="text-slate-300 font-medium">Upload (Tx KB/s)</span>
+            </span>
+            <span class="flex items-center space-x-1.5">
+              <span class="w-3 h-1 bg-emerald-400 rounded-full inline-block"></span>
+              <span class="text-slate-300 font-medium">Latência WAN (ms)</span>
+            </span>
+          </div>
+          <div class="text-[11px] font-mono-num text-slate-500">
+            Janela móvel de ~75s &bull; Detecção de Bufferbloat (Banda vs Latência)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel de Informações Rápidas do Sistema (Estilo Datadog / Grafana) -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+      <div class="flex items-center space-x-4 flex-wrap gap-y-2">
+        <div class="flex items-center space-x-2">
+          <span class="text-slate-400">Endpoint da API:</span>
+          <a href="/api/stats" target="_blank" class="font-mono-num text-sky-400 hover:underline bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+            GET /api/stats
+          </a>
+        </div>
+        <div class="hidden sm:block text-slate-700">|</div>
+        <div class="flex items-center space-x-2">
+          <span class="text-slate-400">Servidor Web:</span>
+          <span class="font-mono-num text-slate-300">Python http.server (Porta 8080)</span>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="text-slate-400">Polling:</span>
+        <span class="text-slate-300 font-mono-num">Fetch JSON @ 3.000ms</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Rodapé -->
+  <footer class="border-t border-slate-800/80 py-4 text-center text-xs text-slate-400">
+    <p>Node Monitor &bull; Painel de Telemetria de Sistema Linux nativo</p>
+  </footer>
+
+  <!-- Script JavaScript para Atualização em Tempo Real -->
+  <script>
+    const REFRESH_INTERVAL_MS = 3000;
+
+    // Elementos do DOM
+    const headerHostname = document.getElementById('header-hostname');
+    const ramValue = document.getElementById('ram-value');
+    const ramProgressBar = document.getElementById('ram-progress-bar');
+    const ramStatusBadge = document.getElementById('ram-status-badge');
+    const ramDetailsText = document.getElementById('ram-details-text');
+
+    const diskValue = document.getElementById('disk-value');
+    const diskProgressBar = document.getElementById('disk-progress-bar');
+    const diskDetailsText = document.getElementById('disk-details-text');
+
+    const uptimeValue = document.getElementById('uptime-value');
+    const uptimeHostBadge = document.getElementById('uptime-host-badge');
+    const lastUpdate = document.getElementById('last-update');
+    const connStatus = document.getElementById('conn-status');
+
+    // Elementos do Card de Link de Internet
+    const netStatusBadge = document.getElementById('net-status-badge');
+    const netLatencyVal = document.getElementById('net-latency-val');
+    const netLatencyTag = document.getElementById('net-latency-tag');
+    const netLocalIp = document.getElementById('net-local-ip');
+    const netPublicIp = document.getElementById('net-public-ip');
+
+    // Elementos da Seção Avançada de Rede (NOC)
+    const trafficStatusBadge = document.getElementById('traffic-status-badge');
+    const rxRateVal = document.getElementById('rx-rate-val');
+    const txRateVal = document.getElementById('tx-rate-val');
+    const rxTotalVal = document.getElementById('rx-total-val');
+    const txTotalVal = document.getElementById('tx-total-val');
+    const netErrsCount = document.getElementById('net-errs-count');
+    const netDropsCount = document.getElementById('net-drops-count');
+
+    const splitDiagBadge = document.getElementById('split-diag-badge');
+    const lanGatewayIp = document.getElementById('lan-gateway-ip');
+    const lanLatencyVal = document.getElementById('lan-latency-val');
+    const wanLatencyVal = document.getElementById('wan-latency-val');
+    const lanWanDelta = document.getElementById('lan-wan-delta');
+
+    const sockEstabVal = document.getElementById('sock-estab-val');
+    const sockListenVal = document.getElementById('sock-listen-val');
+    const sockTwVal = document.getElementById('sock-tw-val');
+    const sockTotalVal = document.getElementById('sock-total-val');
+    const dnsServerVal = document.getElementById('dns-server-val');
+    const dnsLatencyVal = document.getElementById('dns-latency-val');
+
+    /**
+     * Formata taxa em KB/s ou MB/s
+     */
+    function formatRate(kbS) {
+      if (!kbS || isNaN(kbS) || kbS < 0) return '0.0';
+      if (kbS >= 1024) {
+        return (kbS / 1024).toFixed(2) + ' MB/s';
+      }
+      return kbS.toFixed(1) + ' KB/s';
+    }
+
+    /**
+     * Atualiza os cards de telemetria avançada de rede (Throughput, LAN/WAN, Sockets, DNS)
+     */
+    function updateAdvancedNetwork(netData) {
+      if (!netData) return;
+
+      // 1. Throughput (Rx / Tx)
+      const tr = netData.traffic || {};
+      const rxVal = Number(tr.rx_kb_s || 0);
+      const txVal = Number(tr.tx_kb_s || 0);
+
+      if (rxVal >= 1024) {
+        rxRateVal.textContent = (rxVal / 1024).toFixed(2);
+        rxRateVal.nextElementSibling.textContent = 'MB/s';
+      } else {
+        rxRateVal.textContent = rxVal.toFixed(1);
+        rxRateVal.nextElementSibling.textContent = 'KB/s';
+      }
+
+      if (txVal >= 1024) {
+        txRateVal.textContent = (txVal / 1024).toFixed(2);
+        txRateVal.nextElementSibling.textContent = 'MB/s';
+      } else {
+        txRateVal.textContent = txVal.toFixed(1);
+        txRateVal.nextElementSibling.textContent = 'KB/s';
+      }
+
+      const totalRxMb = tr.total_rx_mb || 0;
+      const totalTxMb = tr.total_tx_mb || 0;
+      rxTotalVal.textContent = totalRxMb > 1024 ? `${(totalRxMb / 1024).toFixed(2)} GB` : `${totalRxMb} MB`;
+      txTotalVal.textContent = totalTxMb > 1024 ? `${(totalTxMb / 1024).toFixed(2)} GB` : `${totalTxMb} MB`;
+
+      const drops = (tr.rx_dropped || 0) + (tr.tx_dropped || 0);
+      const errors = (tr.rx_errors || 0) + (tr.tx_errors || 0);
+      netDropsCount.textContent = drops;
+      netErrsCount.textContent = errors;
+
+      if (drops === 0 && errors === 0) {
+        trafficStatusBadge.className = 'text-[11px] font-mono-num px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        trafficStatusBadge.textContent = '0 drops / 0 err';
+      } else {
+        trafficStatusBadge.className = 'text-[11px] font-mono-num px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        trafficStatusBadge.textContent = `${drops} drops`;
+      }
+
+      // 2. Diagnóstico LAN vs WAN
+      const gwIp = netData.gateway_ip || 'Não detectado';
+      lanGatewayIp.textContent = gwIp;
+
+      const lanLat = typeof netData.gateway_latency_ms !== 'undefined' && netData.gateway_latency_ms !== null 
+        ? Number(netData.gateway_latency_ms) 
+        : null;
+      const wanLat = typeof netData.latency_ms !== 'undefined' && netData.latency_ms !== null 
+        ? Number(netData.latency_ms) 
+        : null;
+
+      lanLatencyVal.textContent = lanLat !== null ? lanLat.toFixed(1) : '--';
+      wanLatencyVal.textContent = wanLat !== null ? wanLat.toFixed(1) : '--';
+
+      if (lanLat !== null && wanLat !== null) {
+        const delta = Math.max(0, wanLat - lanLat);
+        lanWanDelta.textContent = `+${delta.toFixed(1)} ms`;
+
+        if (lanLat < 5 && wanLat < 60) {
+          splitDiagBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+          splitDiagBadge.textContent = 'Rede Estável';
+        } else if (lanLat > 20) {
+          splitDiagBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20';
+          splitDiagBadge.textContent = 'Gargalo LAN (Roteador)';
+        } else {
+          splitDiagBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20';
+          splitDiagBadge.textContent = 'WAN Moderada';
+        }
+      } else if (wanLat !== null) {
+        lanWanDelta.textContent = 'Gateway n/a';
+        splitDiagBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20';
+        splitDiagBadge.textContent = 'WAN Ativa';
+      } else {
+        lanWanDelta.textContent = '-- ms';
+        splitDiagBadge.className = 'text-[11px] font-medium px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20';
+        splitDiagBadge.textContent = 'Desconectado';
+      }
+
+      // 3. Sockets TCP & Conexões
+      const socks = netData.sockets || {};
+      sockEstabVal.textContent = socks.established ?? 0;
+      sockListenVal.textContent = socks.listen ?? 0;
+      sockTwVal.textContent = socks.time_wait ?? 0;
+      sockTotalVal.textContent = socks.total ?? 0;
+
+      // 4. DNS
+      const dns = netData.dns || {};
+      dnsServerVal.textContent = dns.nameserver || '127.0.0.53';
+      if (typeof dns.dns_latency_ms !== 'undefined' && dns.dns_latency_ms !== null) {
+        dnsLatencyVal.textContent = `${Number(dns.dns_latency_ms).toFixed(1)} ms`;
+      } else {
+        dnsLatencyVal.textContent = '-- ms';
+      }
+    }
+
+    /**
+     * Aplica cor dinâmica na barra de progresso da memória RAM conforme as regras:
+     * - verde se < 70%
+     * - amarelo se < 85%
+     * - vermelho se > 85%
+     */
+    function updateRamColor(percent) {
+      // Remove classes anteriores
+      ramProgressBar.classList.remove(
+        'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+        'shadow-[0_0_12px_rgba(16,185,129,0.5)]',
+        'shadow-[0_0_12px_rgba(245,158,11,0.5)]',
+        'shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+      );
+      ramStatusBadge.classList.remove(
+        'bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20',
+        'bg-amber-500/10', 'text-amber-400', 'border-amber-500/20',
+        'bg-rose-500/10', 'text-rose-400', 'border-rose-500/20'
+      );
+
+      if (percent < 70) {
+        // Verde (< 70%)
+        ramProgressBar.classList.add('bg-emerald-500');
+        ramStatusBadge.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+        ramStatusBadge.textContent = 'Normal (<70%)';
+      } else if (percent < 85) {
+        // Amarelo (< 85%)
+        ramProgressBar.classList.add('bg-amber-500');
+        ramStatusBadge.classList.add('bg-amber-500/10', 'text-amber-400', 'border-amber-500/20');
+        ramStatusBadge.textContent = 'Atenção (<85%)';
+      } else {
+        // Vermelho (> 85%)
+        ramProgressBar.classList.add('bg-rose-500');
+        ramStatusBadge.classList.add('bg-rose-500/10', 'text-rose-400', 'border-rose-500/20');
+        ramStatusBadge.textContent = 'Crítico (>85%)';
+      }
+    }
+
+    /**
+     * Aplica cor na barra de progresso do disco
+     */
+    function updateDiskColor(percent) {
+      diskProgressBar.classList.remove('bg-sky-500', 'bg-amber-500', 'bg-rose-500');
+      if (percent < 75) {
+        diskProgressBar.classList.add('bg-sky-500');
+      } else if (percent < 90) {
+        diskProgressBar.classList.add('bg-amber-500');
+      } else {
+        diskProgressBar.classList.add('bg-rose-500');
+      }
+    }
+
+    /**
+     * Aplica coloração dinâmica para o Link de Internet e Latência:
+     * - 🟢 Verde se < 50ms
+     * - 🟡 Amarelo se < 150ms
+     * - 🔴 Vermelho se > 150ms ou se falhar
+     */
+    function updateLatencyColor(latency, isOnline) {
+      netStatusBadge.classList.remove(
+        'bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20',
+        'bg-rose-500/10', 'text-rose-400', 'border-rose-500/20'
+      );
+      netLatencyVal.classList.remove('text-emerald-400', 'text-amber-400', 'text-rose-400', 'text-white');
+      netLatencyTag.classList.remove(
+        'bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20',
+        'bg-amber-500/10', 'text-amber-400', 'border-amber-500/20',
+        'bg-rose-500/10', 'text-rose-400', 'border-rose-500/20'
+      );
+
+      if (!isOnline || latency === null || isNaN(latency) || latency < 0) {
+        netStatusBadge.classList.add('bg-rose-500/10', 'text-rose-400', 'border-rose-500/20');
+        netStatusBadge.textContent = 'Offline';
+        netLatencyVal.classList.add('text-rose-400');
+        netLatencyVal.textContent = '--';
+        netLatencyTag.classList.add('bg-rose-500/10', 'text-rose-400', 'border-rose-500/20');
+        netLatencyTag.textContent = 'Falha / Offline';
+        return;
+      }
+
+      netStatusBadge.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+      netStatusBadge.textContent = 'Online';
+
+      if (latency < 50) {
+        // 🟢 Verde se < 50ms
+        netLatencyVal.classList.add('text-emerald-400');
+        netLatencyTag.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/20');
+        netLatencyTag.textContent = '< 50ms Ótimo';
+      } else if (latency < 150) {
+        // 🟡 Amarelo se < 150ms
+        netLatencyVal.classList.add('text-amber-400');
+        netLatencyTag.classList.add('bg-amber-500/10', 'text-amber-400', 'border-amber-500/20');
+        netLatencyTag.textContent = '< 150ms Moderado';
+      } else {
+        // 🔴 Vermelho se > 150ms
+        netLatencyVal.classList.add('text-rose-400');
+        netLatencyTag.classList.add('bg-rose-500/10', 'text-rose-400', 'border-rose-500/20');
+        netLatencyTag.textContent = '> 150ms Alto';
+      }
+    }
+
+    /**
+     * Busca dados da API /api/stats e atualiza a interface
+     */
+    async function fetchStats() {
+      try {
+        const response = await fetch('/api/stats', { cache: 'no-store' });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // 1. Hostname
+        const host = data.hostname || 'Desconhecido';
+        headerHostname.textContent = host;
+        uptimeHostBadge.textContent = host;
+
+        // 2. Uso de RAM
+        const ramPct = typeof data.ram_percent !== 'undefined' 
+          ? Number(data.ram_percent) 
+          : Number(data.ram_usage || 0);
+        ramValue.textContent = ramPct.toFixed(1);
+        ramProgressBar.style.width = `${Math.min(100, Math.max(0, ramPct))}%`;
+        updateRamColor(ramPct);
+
+        if (data.ram && data.ram.total_mb) {
+          ramDetailsText.textContent = `${data.ram.used_mb || 0} MB / ${data.ram.total_mb} MB`;
+        } else {
+          ramDetailsText.textContent = `${ramPct.toFixed(1)}% utilizado`;
+        }
+
+        // 3. Uso do Disco
+        const diskPct = typeof data.disk_percent !== 'undefined' 
+          ? Number(data.disk_percent) 
+          : Number(data.disk_usage || 0);
+        diskValue.textContent = diskPct.toFixed(1);
+        diskProgressBar.style.width = `${Math.min(100, Math.max(0, diskPct))}%`;
+        updateDiskColor(diskPct);
+
+        if (data.disk && data.disk.total_gb) {
+          diskDetailsText.textContent = `${data.disk.used_gb || 0} GB / ${data.disk.total_gb} GB`;
+        } else {
+          diskDetailsText.textContent = `${diskPct.toFixed(1)}% ocupado`;
+        }
+
+        // 4. Uptime
+        uptimeValue.textContent = data.uptime || '--';
+
+        // 5. Link de Internet e Métricas de Rede
+        const netData = data.network || {};
+        const isOnline = (netData.status || data.network_status || '') === 'Online';
+        const latency = typeof netData.latency_ms !== 'undefined' && netData.latency_ms !== null
+          ? Number(netData.latency_ms)
+          : (typeof data.latency_ms !== 'undefined' && data.latency_ms !== null ? Number(data.latency_ms) : null);
+
+        if (isOnline && latency !== null) {
+          netLatencyVal.textContent = latency.toFixed(1);
+        } else {
+          netLatencyVal.textContent = '--';
+        }
+        updateLatencyColor(latency, isOnline);
+
+        netLocalIp.textContent = netData.local_ip || data.local_ip || 'Indisponível';
+        netPublicIp.textContent = netData.public_ip || data.public_ip || 'Indisponível';
+
+        // 6. Atualiza telemetria avançada de rede (Throughput, LAN/WAN, Sockets, DNS)
+        updateAdvancedNetwork(netData);
+
+        // 7. Atualiza gráfico de linhas temporais de rede
+        const curRx = Number((netData.traffic || {}).rx_kb_s || 0);
+        const curTx = Number((netData.traffic || {}).tx_kb_s || 0);
+        const curLat = (netData.status === 'Online' && netData.latency_ms !== null) ? Number(netData.latency_ms) : null;
+        pushNetworkChartData(curRx, curTx, curLat);
+
+        // 8. Horário da última atualização e status de conexão
+        const now = new Date();
+        lastUpdate.textContent = now.toLocaleTimeString('pt-BR');
+        
+        connStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="hidden md:inline text-emerald-400 font-medium">Conectado</span>
+        `;
+
+      } catch (err) {
+        console.error('Falha ao obter métricas de /api/stats:', err);
+        connStatus.innerHTML = `
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+          <span class="text-rose-400 font-medium">Reconectando...</span>
+        `;
+      }
+    }
+
+    // Variáveis e Configuração do Gráfico Temporal Chart.js
+    const MAX_CHART_POINTS = 25;
+    let networkChart = null;
+    const chartPeakRx = document.getElementById('chart-peak-rx');
+    const chartPeakTx = document.getElementById('chart-peak-tx');
+
+    function initNetworkChart() {
+      const ctx = document.getElementById('networkTimeSeriesChart');
+      if (!ctx || typeof Chart === 'undefined') return;
+
+      const gradientRx = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
+      gradientRx.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+      gradientRx.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+
+      const gradientTx = ctx.getContext('2d').createLinearGradient(0, 0, 0, 260);
+      gradientTx.addColorStop(0, 'rgba(129, 140, 248, 0.35)');
+      gradientTx.addColorStop(1, 'rgba(129, 140, 248, 0.0)');
+
+      networkChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Download (Rx KB/s)',
+              data: [],
+              borderColor: '#38bdf8',
+              backgroundColor: gradientRx,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#38bdf8',
+              yAxisID: 'y'
+            },
+            {
+              label: 'Upload (Tx KB/s)',
+              data: [],
+              borderColor: '#818cf8',
+              backgroundColor: gradientTx,
+              borderWidth: 2,
+              fill: true,
+              tension: 0.35,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#818cf8',
+              yAxisID: 'y'
+            },
+            {
+              label: 'Latência WAN (ms)',
+              data: [],
+              borderColor: '#34d399',
+              borderWidth: 1.5,
+              borderDash: [4, 4],
+              fill: false,
+              tension: 0.25,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              pointBackgroundColor: '#34d399',
+              yAxisID: 'yLatency'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#f8fafc',
+              bodyColor: '#cbd5e1',
+              borderColor: 'rgba(56, 189, 248, 0.25)',
+              borderWidth: 1,
+              padding: 10,
+              boxPadding: 4,
+              bodyFont: {
+                family: 'JetBrains Mono',
+                size: 11
+              },
+              titleFont: {
+                family: 'JetBrains Mono',
+                size: 12
+              },
+              callbacks: {
+                label: function(context) {
+                  const val = context.parsed.y !== null ? context.parsed.y : 0;
+                  if (context.datasetIndex === 2) {
+                    return ` Latência WAN: ${val.toFixed(1)} ms`;
+                  }
+                  return ` ${context.dataset.label.split(' ')[0]}: ${formatRate(val)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(255, 255, 255, 0.04)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#64748b',
+                font: {
+                  family: 'JetBrains Mono',
+                  size: 10
+                },
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 7
+              }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(255, 255, 255, 0.05)',
+                drawBorder: false
+              },
+              ticks: {
+                color: '#94a3b8',
+                font: {
+                  family: 'JetBrains Mono',
+                  size: 10
+                },
+                callback: function(value) {
+                  return value >= 1024 ? (value / 1024).toFixed(1) + ' M' : value + ' K';
+                }
+              }
+            },
+            yLatency: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              beginAtZero: true,
+              grid: {
+                drawOnChartArea: false,
+                drawBorder: false
+              },
+              ticks: {
+                color: '#34d399',
+                font: {
+                  family: 'JetBrains Mono',
+                  size: 10
+                },
+                callback: function(value) {
+                  return value + ' ms';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function pushNetworkChartData(rxKb, txKb, latencyMs) {
+      if (!networkChart) return;
+
+      const timeLabel = new Date().toLocaleTimeString('pt-BR');
+      const data = networkChart.data;
+
+      data.labels.push(timeLabel);
+      data.datasets[0].data.push(rxKb);
+      data.datasets[1].data.push(txKb);
+      data.datasets[2].data.push(latencyMs);
+
+      if (data.labels.length > MAX_CHART_POINTS) {
+        data.labels.shift();
+        data.datasets[0].data.shift();
+        data.datasets[1].data.shift();
+        data.datasets[2].data.shift();
+      }
+
+      // Calcula e exibe picos na janela atual
+      const peakRx = Math.max(0, ...data.datasets[0].data);
+      const peakTx = Math.max(0, ...data.datasets[1].data);
+      if (chartPeakRx) chartPeakRx.textContent = formatRate(peakRx);
+      if (chartPeakTx) chartPeakTx.textContent = formatRate(peakTx);
+
+      networkChart.update('none'); // Atualização instantânea sem engasgo de animação
+    }
+
+    // Executa a primeira busca imediatamente e agenda a cada 3 segundos
+    document.addEventListener('DOMContentLoaded', () => {
+      initNetworkChart();
+      fetchStats();
+      setInterval(fetchStats, REFRESH_INTERVAL_MS);
+    });
+  </script>
+</body>
+</html>
+
