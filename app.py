@@ -495,6 +495,149 @@ def get_network_stats():
     }
 
 
+def get_uptime_seconds():
+    """Obtém o tempo de atividade do sistema em segundos (puro float)."""
+    try:
+        if os.path.exists("/proc/uptime"):
+            with open("/proc/uptime", "r") as f:
+                return float(f.readline().split()[0])
+    except Exception:
+        pass
+    return 0.0
+
+
+def generate_prometheus_metrics(stats):
+    """Gera métricas no formato padrão de texto do Prometheus / OpenMetrics (RFC 0004)."""
+    lines = []
+    hostname = stats.get("hostname", "unknown")
+
+    # 1. Informações gerais do Node
+    lines.append("# HELP node_info Metadados estaticos do no Linux monitorado")
+    lines.append("# TYPE node_info gauge")
+    lines.append(f'node_info{{hostname="{hostname}"}} 1')
+
+    # 2. Uptime
+    uptime_secs = get_uptime_seconds()
+    lines.append("# HELP node_uptime_seconds Tempo de atividade do sistema em segundos")
+    lines.append("# TYPE node_uptime_seconds gauge")
+    lines.append(f'node_uptime_seconds{{hostname="{hostname}"}} {uptime_secs:.1f}')
+
+    # 3. Memória RAM
+    ram = stats.get("ram", {})
+    ram_pct = stats.get("ram_percent", 0.0)
+    ram_ratio = round(ram_pct / 100.0, 4)
+    total_bytes = int(ram.get("total_mb", 0)) * 1024 * 1024
+    used_bytes = int(ram.get("used_mb", 0)) * 1024 * 1024
+    avail_bytes = int(ram.get("available_mb", 0)) * 1024 * 1024
+
+    lines.append("# HELP node_memory_usage_ratio Razao de uso da memoria RAM (0.0 a 1.0)")
+    lines.append("# TYPE node_memory_usage_ratio gauge")
+    lines.append(f'node_memory_usage_ratio{{hostname="{hostname}"}} {ram_ratio:.4f}')
+
+    lines.append("# HELP node_memory_total_bytes Total de memoria fisica do sistema em bytes")
+    lines.append("# TYPE node_memory_total_bytes gauge")
+    lines.append(f'node_memory_total_bytes{{hostname="{hostname}"}} {total_bytes}')
+
+    lines.append("# HELP node_memory_used_bytes Memoria utilizada em bytes (excluindo buffers/cache)")
+    lines.append("# TYPE node_memory_used_bytes gauge")
+    lines.append(f'node_memory_used_bytes{{hostname="{hostname}"}} {used_bytes}')
+
+    lines.append("# HELP node_memory_available_bytes Memoria disponivel para novos processos em bytes")
+    lines.append("# TYPE node_memory_available_bytes gauge")
+    lines.append(f'node_memory_available_bytes{{hostname="{hostname}"}} {avail_bytes}')
+
+    # 4. Disco (Raiz /)
+    disk = stats.get("disk", {})
+    disk_pct = stats.get("disk_percent", 0.0)
+    disk_ratio = round(disk_pct / 100.0, 4)
+    disk_total = float(disk.get("total_gb", 0)) * (1024**3)
+    disk_used = float(disk.get("used_gb", 0)) * (1024**3)
+
+    lines.append("# HELP node_disk_usage_ratio Razao de ocupacao da particao raiz (0.0 a 1.0)")
+    lines.append("# TYPE node_disk_usage_ratio gauge")
+    lines.append(f'node_disk_usage_ratio{{hostname="{hostname}",mount="/"}} {disk_ratio:.4f}')
+
+    if disk_total > 0:
+        lines.append("# HELP node_disk_total_bytes Capacidade total do sistema de arquivos em bytes")
+        lines.append("# TYPE node_disk_total_bytes gauge")
+        lines.append(f'node_disk_total_bytes{{hostname="{hostname}",mount="/"}} {int(disk_total)}')
+
+        lines.append("# HELP node_disk_used_bytes Espaco utilizado no sistema de arquivos em bytes")
+        lines.append("# TYPE node_disk_used_bytes gauge")
+        lines.append(f'node_disk_used_bytes{{hostname="{hostname}",mount="/"}} {int(disk_used)}')
+
+    # 5. Rede & Latência (SLIs)
+    net = stats.get("network", {})
+    is_online = 1 if net.get("status") == "Online" else 0
+    lines.append("# HELP node_network_online_status Status de conectividade com a internet (1=Online, 0=Offline)")
+    lines.append("# TYPE node_network_online_status gauge")
+    lines.append(f'node_network_online_status{{hostname="{hostname}"}} {is_online}')
+
+    wan_lat = net.get("latency_ms")
+    if wan_lat is not None:
+        lines.append("# HELP node_network_wan_latency_ms Latencia ICMP para o alvo WAN (1.1.1.1) em milissegundos")
+        lines.append("# TYPE node_network_wan_latency_ms gauge")
+        lines.append(f'node_network_wan_latency_ms{{hostname="{hostname}",target="1.1.1.1"}} {float(wan_lat):.2f}')
+
+    gw_lat = net.get("gateway_latency_ms")
+    if gw_lat is not None:
+        gw_ip = net.get("gateway_ip", "gateway")
+        lines.append("# HELP node_network_gateway_latency_ms Latencia ICMP para o gateway local (LAN) em milissegundos")
+        lines.append("# TYPE node_network_gateway_latency_ms gauge")
+        lines.append(f'node_network_gateway_latency_ms{{hostname="{hostname}",gateway="{gw_ip}"}} {float(gw_lat):.2f}')
+
+    # Tráfego de Rede
+    tr = net.get("traffic", {})
+    rx_kb = float(tr.get("rx_kb_s", 0.0))
+    tx_kb = float(tr.get("tx_kb_s", 0.0))
+    lines.append("# HELP node_network_rx_kb_per_second Taxa instantanea de recepcao de rede em KB/s")
+    lines.append("# TYPE node_network_rx_kb_per_second gauge")
+    lines.append(f'node_network_rx_kb_per_second{{hostname="{hostname}"}} {rx_kb:.2f}')
+
+    lines.append("# HELP node_network_tx_kb_per_second Taxa instantanea de transmissao de rede em KB/s")
+    lines.append("# TYPE node_network_tx_kb_per_second gauge")
+    lines.append(f'node_network_tx_kb_per_second{{hostname="{hostname}"}} {tx_kb:.2f}')
+
+    rx_bytes_tot = int(float(tr.get("total_rx_mb", 0.0)) * 1024 * 1024)
+    tx_bytes_tot = int(float(tr.get("total_tx_mb", 0.0)) * 1024 * 1024)
+    lines.append("# HELP node_network_receive_bytes_total Total de bytes recebidos nas interfaces de rede")
+    lines.append("# TYPE node_network_receive_bytes_total counter")
+    lines.append(f'node_network_receive_bytes_total{{hostname="{hostname}"}} {rx_bytes_tot}')
+
+    lines.append("# HELP node_network_transmit_bytes_total Total de bytes transmitidos nas interfaces de rede")
+    lines.append("# TYPE node_network_transmit_bytes_total counter")
+    lines.append(f'node_network_transmit_bytes_total{{hostname="{hostname}"}} {tx_bytes_tot}')
+
+    drops = int(tr.get("rx_dropped", 0)) + int(tr.get("tx_dropped", 0))
+    errors = int(tr.get("rx_errors", 0)) + int(tr.get("tx_errors", 0))
+    lines.append("# HELP node_network_dropped_packets_total Pacotes descartados nas interfaces de rede")
+    lines.append("# TYPE node_network_dropped_packets_total counter")
+    lines.append(f'node_network_dropped_packets_total{{hostname="{hostname}"}} {drops}')
+
+    lines.append("# HELP node_network_errors_total Erros de transmissao ou recepcao nas interfaces")
+    lines.append("# TYPE node_network_errors_total counter")
+    lines.append(f'node_network_errors_total{{hostname="{hostname}"}} {errors}')
+
+    # Sockets TCP
+    socks = net.get("sockets", {})
+    lines.append("# HELP node_tcp_connections_state Contagem de conexoes TCP ativas por estado")
+    lines.append("# TYPE node_tcp_connections_state gauge")
+    for st in ("established", "listen", "time_wait", "total"):
+        lines.append(f'node_tcp_connections_state{{hostname="{hostname}",state="{st}"}} {socks.get(st, 0)}')
+
+    # DNS
+    dns = net.get("dns", {})
+    dns_lat = dns.get("dns_latency_ms")
+    if dns_lat is not None:
+        ns = dns.get("nameserver", "unknown")
+        lines.append("# HELP node_dns_lookup_latency_ms Tempo de resolucao de consulta DNS em milissegundos")
+        lines.append("# TYPE node_dns_lookup_latency_ms gauge")
+        lines.append(f'node_dns_lookup_latency_ms{{hostname="{hostname}",nameserver="{ns}"}} {float(dns_lat):.2f}')
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def collect_system_stats():
     """Agrega todas as métricas do sistema em um dicionário."""
     hostname = get_hostname()
@@ -543,6 +686,8 @@ class NodeMonitorHandler(http.server.BaseHTTPRequestHandler):
             self.serve_index()
         elif path == "/api/stats":
             self.serve_stats()
+        elif path == "/metrics":
+            self.serve_prometheus_metrics()
         else:
             self.send_error(404, "Rota não encontrada")
 
@@ -579,6 +724,21 @@ class NodeMonitorHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, f"Erro interno ao gerar métricas: {e}")
 
+    def serve_prometheus_metrics(self):
+        try:
+            stats = collect_system_stats()
+            body = generate_prometheus_metrics(stats).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            self.send_error(500, f"Erro interno ao gerar métricas do Prometheus: {e}")
+
     def log_message(self, format, *args):
         # Log simplificado e limpo no console
         sys.stdout.write(f"[{self.log_date_time_string()}] {self.command} {self.path} - {format % args}\n")
@@ -594,6 +754,7 @@ def run_server():
         print(f" 🚀 Node Monitor iniciado com sucesso!")
         print(f" 🌐 Dashboard acessível em: http://localhost:{PORT}")
         print(f" 📊 API Stats acessível em: http://localhost:{PORT}/api/stats")
+        print(f" 📈 Prometheus Exporter em: http://localhost:{PORT}/metrics")
         print(f" 📁 Diretório base: {BASE_DIR}")
         print(f"==================================================")
         try:

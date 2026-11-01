@@ -1,0 +1,78 @@
+groups:
+  - name: node_monitor_slo_alerts
+    rules:
+      # =====================================================================
+      # SLO 1: Saturação de Memória RAM (Capacity & Saturation SLO)
+      # Objetivo: Garantir 99% do tempo a RAM abaixo de 85% para evitar OOM Killer.
+      # =====================================================================
+      - alert: NodeHighMemoryPressure
+        expr: node_memory_usage_ratio > 0.85
+        for: 1m
+        labels:
+          severity: warning
+          tier: infrastructure
+          slo: memory_saturation
+        annotations:
+          summary: "Uso de memória RAM acima do limite de SLO (> 85%)"
+          description: "O nó {{ $labels.hostname }} está operando com {{ $value | humanizePercentage }} de RAM utilizada há mais de 1 minuto."
+          runbook_url: "https://github.com/Pavlosk1994/linux-monitor#runbook-memory"
+
+      - alert: NodeCriticalMemoryExhaustion
+        expr: node_memory_usage_ratio > 0.95
+        for: 30s
+        labels:
+          severity: critical
+          tier: infrastructure
+          slo: memory_saturation
+        annotations:
+          summary: "Risco iminente de OOM Killer no nó {{ $labels.hostname }}"
+          description: "Memória RAM atingiu {{ $value | humanizePercentage }}. O kernel Linux pode encerrar processos essenciais."
+          runbook_url: "https://github.com/Pavlosk1994/linux-monitor#runbook-memory"
+
+      # =====================================================================
+      # SLO 2: Conectividade e Latência WAN (Availability & Latency SLO)
+      # Objetivo: 95% das sondagens com latência < 50ms e 100% online.
+      # =====================================================================
+      - alert: NodeNetworkWANDegraded
+        expr: node_network_wan_latency_ms > 150 or node_network_online_status == 0
+        for: 30s
+        labels:
+          severity: critical
+          tier: network
+          slo: wan_latency
+        annotations:
+          summary: "Degradação crítica ou perda total de link WAN (Internet)"
+          description: "A latência para 1.1.1.1 excedeu 150ms ou o nó {{ $labels.hostname }} perdeu rota de saída."
+          runbook_url: "https://github.com/Pavlosk1994/linux-monitor#runbook-network"
+
+      # =====================================================================
+      # SLO 3: Capacidade de Armazenamento do Disco Raiz (Storage SLO)
+      # Objetivo: Partição raiz '/' deve manter pelo menos 15% de folga livre.
+      # =====================================================================
+      - alert: NodeDiskSpaceFillingFast
+        expr: node_disk_usage_ratio{mount="/"} > 0.85
+        for: 2m
+        labels:
+          severity: warning
+          tier: infrastructure
+          slo: storage_capacity
+        annotations:
+          summary: "Partição raiz / atingiu mais de 85% de ocupação"
+          description: "A partição raiz do nó {{ $labels.hostname }} está com {{ $value | humanizePercentage }} de espaço preenchido."
+          runbook_url: "https://github.com/Pavlosk1994/linux-monitor#runbook-storage"
+
+      # =====================================================================
+      # SLO 4: Resolução de Nomes DNS (Core Infrastructure SLI)
+      # Objetivo: Tempo de resposta DNS abaixo de 150ms.
+      # =====================================================================
+      - alert: NodeDNSResolutionSlow
+        expr: node_dns_lookup_latency_ms > 200
+        for: 1m
+        labels:
+          severity: warning
+          tier: network
+          slo: dns_health
+        annotations:
+          summary: "Resolução DNS lenta ou com tempo limite excedido"
+          description: "Tempo de resposta do servidor DNS está em {{ $value }}ms no nó {{ $labels.hostname }}."
+          runbook_url: "https://github.com/Pavlosk1994/linux-monitor#runbook-dns"
