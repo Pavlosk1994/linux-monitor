@@ -17,6 +17,13 @@ import time
 import urllib.parse
 import urllib.request
 
+# Módulo de Inteligência Artificial para Diagnóstico de Incidentes (SRE AIOps)
+try:
+    from sre.ai_agent import AIIncidentAnalyzer, IncidentStore
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from sre.ai_agent import AIIncidentAnalyzer, IncidentStore
+
 PORT = 8080
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "index.html")
@@ -688,8 +695,129 @@ class NodeMonitorHandler(http.server.BaseHTTPRequestHandler):
             self.serve_stats()
         elif path == "/metrics":
             self.serve_prometheus_metrics()
+        elif path == "/api/ai/incidents":
+            self.serve_ai_incidents()
         else:
             self.send_error(404, "Rota não encontrada")
+
+    def do_POST(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+
+        if path == "/api/ai/webhook":
+            self.handle_ai_webhook()
+        elif path == "/api/ai/simulate":
+            self.handle_ai_simulate()
+        else:
+            self.send_error(404, "Rota POST não encontrada")
+
+    def read_json_body(self):
+        """Lê e desserializa o corpo JSON de uma requisição POST."""
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length > 0:
+            raw_body = self.rfile.read(content_length).decode("utf-8")
+            try:
+                return json.loads(raw_body)
+            except Exception:
+                return {}
+        return {}
+
+    def handle_ai_webhook(self):
+        """Processa webhooks de alertas do Alertmanager ou de fontes externas."""
+        try:
+            payload = self.read_json_body()
+            alerts = payload.get("alerts", [])
+
+            incidents_created = []
+            current_stats = collect_system_stats()
+
+            if alerts and isinstance(alerts, list):
+                for alt in alerts:
+                    inc = AIIncidentAnalyzer.analyze(alt, current_stats)
+                    incidents_created.append(inc)
+            else:
+                inc = AIIncidentAnalyzer.analyze(payload, current_stats)
+                incidents_created.append(inc)
+
+            resp_body = json.dumps({
+                "status": "success",
+                "incidents_analyzed": len(incidents_created),
+                "data": incidents_created
+            }, ensure_ascii=False, indent=2).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(resp_body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp_body)
+        except Exception as e:
+            self.send_error(500, f"Erro ao processar webhook SRE AI: {e}")
+
+    def handle_ai_simulate(self):
+        """Dispara um cenário de teste de caos/incidente para demonstração em entrevista."""
+        try:
+            body = self.read_json_body()
+            scenario = body.get("scenario", "memory")
+
+            scenarios = {
+                "memory": {
+                    "alertname": "NodeHighMemoryPressure",
+                    "severity": "critical",
+                    "annotations": {"summary": "Uso de memória RAM acima do limite do SLO (> 85%) por 1m"},
+                    "labels": {"slo": "memory_saturation", "tier": "infrastructure"}
+                },
+                "wan": {
+                    "alertname": "NodeNetworkWANDegraded",
+                    "severity": "critical",
+                    "annotations": {"summary": "Latência WAN para 1.1.1.1 excedeu 150ms ou perda de rota"},
+                    "labels": {"slo": "wan_latency", "tier": "network"}
+                },
+                "disk": {
+                    "alertname": "NodeDiskSpaceFillingFast",
+                    "severity": "warning",
+                    "annotations": {"summary": "Partição raiz / atingiu taxa de ocupação > 85%"},
+                    "labels": {"slo": "storage_capacity", "tier": "storage"}
+                }
+            }
+
+            chosen_alert = scenarios.get(scenario, scenarios["memory"])
+            current_stats = collect_system_stats()
+            incident = AIIncidentAnalyzer.analyze(chosen_alert, current_stats)
+
+            resp_body = json.dumps({
+                "status": "simulated",
+                "scenario": scenario,
+                "incident": incident
+            }, ensure_ascii=False, indent=2).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(resp_body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp_body)
+        except Exception as e:
+            self.send_error(500, f"Erro ao simular incidente SRE: {e}")
+
+    def serve_ai_incidents(self):
+        """Retorna o histórico de incidentes diagnosticados pelo Agente de IA."""
+        try:
+            incidents = IncidentStore.get_all(limit=15)
+            resp_body = json.dumps({
+                "total": len(incidents),
+                "incidents": incidents
+            }, ensure_ascii=False, indent=2).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(resp_body)))
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(resp_body)
+        except Exception as e:
+            self.send_error(500, f"Erro ao listar incidentes: {e}")
 
     def serve_index(self):
         if not os.path.isfile(INDEX_PATH):
@@ -755,6 +883,8 @@ def run_server():
         print(f" 🌐 Dashboard acessível em: http://localhost:{PORT}")
         print(f" 📊 API Stats acessível em: http://localhost:{PORT}/api/stats")
         print(f" 📈 Prometheus Exporter em: http://localhost:{PORT}/metrics")
+        print(f" 🤖 SRE AI Webhook em: http://localhost:{PORT}/api/ai/webhook")
+        print(f" 🚨 Incidentes SRE AI em: http://localhost:{PORT}/api/ai/incidents")
         print(f" 📁 Diretório base: {BASE_DIR}")
         print(f"==================================================")
         try:

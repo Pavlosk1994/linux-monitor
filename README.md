@@ -18,6 +18,7 @@
 
 - **⚡ Zero Dependências Externas (Core):** O servidor web e o coletor de métricas (`app.py`) utilizam **exclusivamente módulos nativos da biblioteca padrão do Python** (`http.server`, `subprocess`, `socket`). Sem necessidade de instalar pacotes pesados para rodar o backend.
 - **📐 Exportador Nativo Prometheus & Stack SRE (`/metrics`):** Expõe métricas no padrão oficial OpenMetrics/Prometheus para integração direta com Prometheus e Grafana, acompanhado de manifestos com SLOs e alertas formais em PromQL na pasta `sre/`.
+- **🤖 Agente SRE com IA (AIOps & Root Cause Analysis):** Receptor de alertas integrado que intercepta webhooks do Alertmanager ou simulações de caos, coleta evidências do kernel (processos `ps`, logs `journalctl`, `dmesg` OOM) e diagnostica a causa raiz (RCA) com plano de remediação acionável.
 - **🎨 Interface Moderna em Dark Mode:** Construída com **Tailwind CSS** e ícones **FontAwesome 6**, oferecendo um visual limpo de alta legibilidade inspirado em ferramentas de observabilidade corporativas (Datadog/Grafana).
 - **🛡️ Modo Privacidade em 1 Clique (Portfólio Ready):** Botão dedicado no cabeçalho para mascarar instantaneamente dados de rede e identificação (IP Público, IP Local, Gateway LAN, Hostname e DNS) com formato `***.***.*.*`, permitindo tirar prints e gravar demonstrações com total segurança sem expor vulnerabilidades.
 - **📈 Telemetria de Hardware em Tempo Real:**
@@ -149,20 +150,38 @@ O servidor expõe um endpoint RESTful de alta velocidade (`< 15ms` de tempo de r
 }
 ```
 
+### 🛣️ Tabela de Endpoints da API
+
+| Rota | Método | Função |
+| :--- | :--- | :--- |
+| `/` | `GET` | Dashboard Web em Dark Mode (Tailwind CSS + FontAwesome) |
+| `/api/stats` | `GET` | Telemetria completa do sistema em formato JSON nativo |
+| `/metrics` | `GET` | Métricas no padrão OpenMetrics/Prometheus para scraping |
+| `/api/ai/incidents` | `GET` | Histórico dos incidentes e relatórios de Causa Raiz (RCA) |
+| `/api/ai/webhook` | `POST` | Receptor de alertas (Webhook) do Prometheus Alertmanager |
+| `/api/ai/simulate` | `POST` | Simulação de incidentes de caos para demonstração técnica |
+
 ---
 
 ## 📂 Estrutura do Projeto
 
 ```text
 linux-monitor/
-├── app.py                         # Servidor HTTP nativo e coletor de métricas Linux
+├── app.py                         # Servidor HTTP nativo, APIs e coletor Linux
 ├── index.html                     # Interface Dark Mode (Tailwind CSS + FontAwesome)
 ├── main.py                        # Wrapper desktop nativo (PyQt5 + QWebEngine)
 ├── requirements.txt               # Dependências opcionais do modo Desktop
 ├── linux-monitor.service.example  # Template de serviço systemd para inicialização no boot
 ├── Linux-Monitor.desktop.example  # Atalho de aplicativo para a Área de Trabalho
 ├── LICENSE                        # Licença MIT
-└── README.md                      # Documentação completa
+├── README.md                      # Documentação completa
+└── sre/                           # Stack de Observabilidade SRE & AIOps
+    ├── ai_agent.py                # Context Harvester e Motor de Causa Raiz (RCA)
+    ├── alert.rules.yml            # Regras de alerta formais de SLOs em PromQL
+    ├── alertmanager.yml           # Roteamento de alertas para o webhook do Agente de IA
+    ├── docker-compose.yml         # Prometheus v2.50 + Alertmanager v0.27
+    ├── prometheus.yml             # Scrape config apontando para o Node Monitor
+    └── README.md                  # Matriz de SLOs e guia da stack SRE
 ```
 
 ---

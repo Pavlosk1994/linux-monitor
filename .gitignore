@@ -28,6 +28,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and runtime data
 *.log
+sre/incident_history.json
 
