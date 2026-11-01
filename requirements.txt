@@ -2,3 +2,4 @@
 # As dependências abaixo são necessárias caso queira executar o wrapper de interface desktop nativa (main.py):
 PyQt5>=5.15.0
 PyQtWebEngine>=5.15.0
+

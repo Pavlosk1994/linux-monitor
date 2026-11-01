@@ -86,8 +86,21 @@
         </div>
       </div>
 
-      <!-- Indicadores de Status e Auto-Refresh -->
-      <div class="flex items-center space-x-4 text-xs">
+      <!-- Indicadores de Status, Botão de Privacidade e Auto-Refresh -->
+      <div class="flex items-center space-x-2 sm:space-x-3 text-xs">
+        
+        <!-- Botão Modo Privacidade (Oculta IPs e Hostname com asteriscos para prints) -->
+        <button
+          id="btn-privacy-toggle"
+          onclick="togglePrivacyMode()"
+          title="Clique para ocultar ou revelar dados sensíveis (IPs, Hostname) com asteriscos (*)"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-300 transition-all cursor-pointer font-medium shadow-sm hover:border-slate-600 focus:outline-none"
+        >
+          <i id="privacy-icon" class="fa-solid fa-eye text-slate-400 text-xs"></i>
+          <span id="privacy-label" class="hidden sm:inline">Modo Privacidade</span>
+          <span id="privacy-badge" class="px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono">OFF</span>
+        </button>
+
         <div class="hidden sm:flex items-center space-x-2 text-slate-400 bg-slate-900/90 px-3 py-1.5 rounded-md border border-slate-800">
           <i class="fa-solid fa-arrows-rotate text-sky-400 text-[11px] animate-spin-slow"></i>
           <span>Atualização: <strong class="text-slate-200">a cada 3s</strong></span>
@@ -675,6 +688,59 @@
     const dnsServerVal = document.getElementById('dns-server-val');
     const dnsLatencyVal = document.getElementById('dns-latency-val');
 
+    // Controle do Modo Privacidade (Mascaramento de IPs e Hostname com asteriscos para prints)
+    const btnPrivacyToggle = document.getElementById('btn-privacy-toggle');
+    const privacyIcon = document.getElementById('privacy-icon');
+    const privacyLabel = document.getElementById('privacy-label');
+    const privacyBadge = document.getElementById('privacy-badge');
+
+    let isPrivacyMode = localStorage.getItem('linux_monitor_privacy_mode') === 'true';
+    let latestStatsData = null;
+
+    function maskIp(val) {
+      if (!val || val === '--' || val === 'Detectando...' || val === 'Indisponível' || val === 'Não detectado' || val === 'Desconectado') {
+        return val;
+      }
+      return '***.***.*.*';
+    }
+
+    function maskHostname(val) {
+      if (!val || val === '--' || val === 'carregando...' || val === 'Desconhecido') {
+        return val;
+      }
+      return 'node-******';
+    }
+
+    function updatePrivacyButtonUI() {
+      if (!btnPrivacyToggle) return;
+      if (isPrivacyMode) {
+        btnPrivacyToggle.className = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-md border border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition-all cursor-pointer font-medium shadow-[0_0_12px_rgba(245,158,11,0.25)] focus:outline-none';
+        if (privacyIcon) privacyIcon.className = 'fa-solid fa-eye-slash text-amber-400 text-xs';
+        if (privacyLabel) privacyLabel.textContent = 'Privacidade';
+        if (privacyBadge) {
+          privacyBadge.className = 'px-1.5 py-0.5 text-[10px] rounded bg-amber-500/30 text-amber-200 border border-amber-500/60 font-bold font-mono animate-pulse';
+          privacyBadge.textContent = 'ON (*)';
+        }
+      } else {
+        btnPrivacyToggle.className = 'flex items-center space-x-1.5 px-3 py-1.5 rounded-md border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-300 transition-all cursor-pointer font-medium shadow-sm hover:border-slate-600 focus:outline-none';
+        if (privacyIcon) privacyIcon.className = 'fa-solid fa-eye text-slate-400 text-xs';
+        if (privacyLabel) privacyLabel.textContent = 'Modo Privacidade';
+        if (privacyBadge) {
+          privacyBadge.className = 'px-1.5 py-0.5 text-[10px] rounded bg-slate-800 text-slate-400 border border-slate-700 font-mono';
+          privacyBadge.textContent = 'OFF';
+        }
+      }
+    }
+
+    function togglePrivacyMode() {
+      isPrivacyMode = !isPrivacyMode;
+      localStorage.setItem('linux_monitor_privacy_mode', isPrivacyMode ? 'true' : 'false');
+      updatePrivacyButtonUI();
+      if (latestStatsData) {
+        renderAllStats(latestStatsData);
+      }
+    }
+
     /**
      * Formata taxa em KB/s ou MB/s
      */
@@ -733,7 +799,7 @@
 
       // 2. Diagnóstico LAN vs WAN
       const gwIp = netData.gateway_ip || 'Não detectado';
-      lanGatewayIp.textContent = gwIp;
+      lanGatewayIp.textContent = isPrivacyMode ? maskIp(gwIp) : gwIp;
 
       const lanLat = typeof netData.gateway_latency_ms !== 'undefined' && netData.gateway_latency_ms !== null 
         ? Number(netData.gateway_latency_ms) 
@@ -778,7 +844,8 @@
 
       // 4. DNS
       const dns = netData.dns || {};
-      dnsServerVal.textContent = dns.nameserver || '127.0.0.53';
+      const dnsHost = dns.nameserver || '127.0.0.53';
+      dnsServerVal.textContent = isPrivacyMode ? maskIp(dnsHost) : dnsHost;
       if (typeof dns.dns_latency_ms !== 'undefined' && dns.dns_latency_ms !== null) {
         dnsLatencyVal.textContent = `${Number(dns.dns_latency_ms).toFixed(1)} ms`;
       } else {
@@ -888,6 +955,73 @@
     }
 
     /**
+     * Renderiza todas as métricas na tela aplicando máscara de privacidade quando ativa
+     */
+    function renderAllStats(data) {
+      if (!data) return;
+
+      // 1. Hostname (Mascarado se Modo Privacidade estiver ativo)
+      const rawHost = data.hostname || 'Desconhecido';
+      const displayHost = isPrivacyMode ? maskHostname(rawHost) : rawHost;
+      headerHostname.textContent = displayHost;
+      uptimeHostBadge.textContent = displayHost;
+
+      // 2. Uso de RAM
+      const ramPct = typeof data.ram_percent !== 'undefined' 
+        ? Number(data.ram_percent) 
+        : Number(data.ram_usage || 0);
+      ramValue.textContent = ramPct.toFixed(1);
+      ramProgressBar.style.width = `${Math.min(100, Math.max(0, ramPct))}%`;
+      updateRamColor(ramPct);
+
+      if (data.ram && data.ram.total_mb) {
+        ramDetailsText.textContent = `${data.ram.used_mb || 0} MB / ${data.ram.total_mb} MB`;
+      } else {
+        ramDetailsText.textContent = `${ramPct.toFixed(1)}% utilizado`;
+      }
+
+      // 3. Uso do Disco
+      const diskPct = typeof data.disk_percent !== 'undefined' 
+        ? Number(data.disk_percent) 
+        : Number(data.disk_usage || 0);
+      diskValue.textContent = diskPct.toFixed(1);
+      diskProgressBar.style.width = `${Math.min(100, Math.max(0, diskPct))}%`;
+      updateDiskColor(diskPct);
+
+      if (data.disk && data.disk.total_gb) {
+        diskDetailsText.textContent = `${data.disk.used_gb || 0} GB / ${data.disk.total_gb} GB`;
+      } else {
+        diskDetailsText.textContent = `${diskPct.toFixed(1)}% ocupado`;
+      }
+
+      // 4. Uptime
+      uptimeValue.textContent = data.uptime || '--';
+
+      // 5. Link de Internet e Métricas de Rede
+      const netData = data.network || {};
+      const isOnline = (netData.status || data.network_status || '') === 'Online';
+      const latency = typeof netData.latency_ms !== 'undefined' && netData.latency_ms !== null
+        ? Number(netData.latency_ms)
+        : (typeof data.latency_ms !== 'undefined' && data.latency_ms !== null ? Number(data.latency_ms) : null);
+
+      if (isOnline && latency !== null) {
+        netLatencyVal.textContent = latency.toFixed(1);
+      } else {
+        netLatencyVal.textContent = '--';
+      }
+      updateLatencyColor(latency, isOnline);
+
+      // IPs Local e Público (Mascarados se Modo Privacidade estiver ativo)
+      const rawLocalIp = netData.local_ip || data.local_ip || 'Indisponível';
+      const rawPublicIp = netData.public_ip || data.public_ip || 'Indisponível';
+      netLocalIp.textContent = isPrivacyMode ? maskIp(rawLocalIp) : rawLocalIp;
+      netPublicIp.textContent = isPrivacyMode ? maskIp(rawPublicIp) : rawPublicIp;
+
+      // 6. Atualiza telemetria avançada de rede (Throughput, LAN/WAN, Sockets, DNS)
+      updateAdvancedNetwork(netData);
+    }
+
+    /**
      * Busca dados da API /api/stats e atualiza a interface
      */
     async function fetchStats() {
@@ -899,64 +1033,11 @@
         }
 
         const data = await response.json();
-
-        // 1. Hostname
-        const host = data.hostname || 'Desconhecido';
-        headerHostname.textContent = host;
-        uptimeHostBadge.textContent = host;
-
-        // 2. Uso de RAM
-        const ramPct = typeof data.ram_percent !== 'undefined' 
-          ? Number(data.ram_percent) 
-          : Number(data.ram_usage || 0);
-        ramValue.textContent = ramPct.toFixed(1);
-        ramProgressBar.style.width = `${Math.min(100, Math.max(0, ramPct))}%`;
-        updateRamColor(ramPct);
-
-        if (data.ram && data.ram.total_mb) {
-          ramDetailsText.textContent = `${data.ram.used_mb || 0} MB / ${data.ram.total_mb} MB`;
-        } else {
-          ramDetailsText.textContent = `${ramPct.toFixed(1)}% utilizado`;
-        }
-
-        // 3. Uso do Disco
-        const diskPct = typeof data.disk_percent !== 'undefined' 
-          ? Number(data.disk_percent) 
-          : Number(data.disk_usage || 0);
-        diskValue.textContent = diskPct.toFixed(1);
-        diskProgressBar.style.width = `${Math.min(100, Math.max(0, diskPct))}%`;
-        updateDiskColor(diskPct);
-
-        if (data.disk && data.disk.total_gb) {
-          diskDetailsText.textContent = `${data.disk.used_gb || 0} GB / ${data.disk.total_gb} GB`;
-        } else {
-          diskDetailsText.textContent = `${diskPct.toFixed(1)}% ocupado`;
-        }
-
-        // 4. Uptime
-        uptimeValue.textContent = data.uptime || '--';
-
-        // 5. Link de Internet e Métricas de Rede
-        const netData = data.network || {};
-        const isOnline = (netData.status || data.network_status || '') === 'Online';
-        const latency = typeof netData.latency_ms !== 'undefined' && netData.latency_ms !== null
-          ? Number(netData.latency_ms)
-          : (typeof data.latency_ms !== 'undefined' && data.latency_ms !== null ? Number(data.latency_ms) : null);
-
-        if (isOnline && latency !== null) {
-          netLatencyVal.textContent = latency.toFixed(1);
-        } else {
-          netLatencyVal.textContent = '--';
-        }
-        updateLatencyColor(latency, isOnline);
-
-        netLocalIp.textContent = netData.local_ip || data.local_ip || 'Indisponível';
-        netPublicIp.textContent = netData.public_ip || data.public_ip || 'Indisponível';
-
-        // 6. Atualiza telemetria avançada de rede (Throughput, LAN/WAN, Sockets, DNS)
-        updateAdvancedNetwork(netData);
+        latestStatsData = data;
+        renderAllStats(data);
 
         // 7. Atualiza gráfico de linhas temporais de rede
+        const netData = data.network || {};
         const curRx = Number((netData.traffic || {}).rx_kb_s || 0);
         const curTx = Number((netData.traffic || {}).tx_kb_s || 0);
         const curLat = (netData.status === 'Online' && netData.latency_ms !== null) ? Number(netData.latency_ms) : null;
@@ -1173,6 +1254,7 @@
 
     // Executa a primeira busca imediatamente e agenda a cada 3 segundos
     document.addEventListener('DOMContentLoaded', () => {
+      updatePrivacyButtonUI();
       initNetworkChart();
       fetchStats();
       setInterval(fetchStats, REFRESH_INTERVAL_MS);

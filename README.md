@@ -18,6 +18,7 @@
 
 - **⚡ Zero Dependências Externas (Core):** O servidor web e o coletor de métricas (`app.py`) utilizam **exclusivamente módulos nativos da biblioteca padrão do Python** (`http.server`, `subprocess`, `socket`). Sem necessidade de instalar pacotes pesados para rodar o backend.
 - **🎨 Interface Moderna em Dark Mode:** Construída com **Tailwind CSS** e ícones **FontAwesome 6**, oferecendo um visual limpo de alta legibilidade inspirado em ferramentas de observabilidade corporativas (Datadog/Grafana).
+- **🛡️ Modo Privacidade em 1 Clique (Portfólio Ready):** Botão dedicado no cabeçalho para mascarar instantaneamente dados de rede e identificação (IP Público, IP Local, Gateway LAN, Hostname e DNS) com formato `***.***.*.*`, permitindo tirar prints e gravar demonstrações com total segurança sem expor vulnerabilidades.
 - **📈 Telemetria de Hardware em Tempo Real:**
   - **Uso de Memória RAM:** Percentual, memória utilizada vs total em MB e barra de progresso com **alertas dinâmicos por cor** (🟢 `<70%`, 🟡 `<85%`, 🔴 `>85%`).
   - **Armazenamento:** Percentual de uso da partição raiz (`/`) e volume ocupado.
@@ -184,3 +185,4 @@ Desenvolvido por **Pavlosk da Silva Martins**
 ## 📄 Licença
 
 Este projeto está licenciado sob a Licença MIT - consulte o arquivo [LICENSE](LICENSE) para obter mais detalhes.
+

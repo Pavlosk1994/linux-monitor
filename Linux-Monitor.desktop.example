@@ -9,3 +9,4 @@ Icon=utilities-system-monitor
 Terminal=false
 Categories=System;Monitor;
 StartupNotify=true
+
